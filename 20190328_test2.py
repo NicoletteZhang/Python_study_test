@@ -32,15 +32,40 @@ class Player():   #定义一个类，把相同特性的东西进行归类;类的
         
 class Monster():
     '定义怪物类'
+    def __init__(self,hp = 100):
+        self.hp = hp
+    def run(self):
+        print('移动到某个位置')
+
+#animals是monster的子类，继承父类的属性和方法
+class Animals(Monster):
+    '普通怪物'
+    def __init__(self, hp = 10):
+        self.hp = hp
+
+class Boss(Monster):
+    'boss类怪物'
     pass
 
-user11 = Player('tom',100,'war')   #类的实例化
-user22 = Player('jerry',80, 'master')
-user11.print_role2()
-user22.print_role2()
+#存在多个类的时候，通常先用pass。先理清类之间的逻辑关系，再逐个实现
 
-user11.updateName('wilson')
-user11.print_role2()
+#对父类的输出
+a1 = Monster(200)#覆盖初始化的变量值
+print(a1.hp)
+print(a1.run())
 
-user11.name = ('aaa')
-user11.print_role2()
+a2 = Animals(1)
+print(a2.hp)
+print(a2.run())
+
+
+#user11 = Player('tom',100,'war')   #类的实例化
+#user22 = Player('jerry',80, 'master')
+#user11.print_role2()
+#user22.print_role2()
+
+#user11.updateName('wilson')
+#user11.print_role2()
+
+#user11.name = ('aaa')
+#user11.print_role2()

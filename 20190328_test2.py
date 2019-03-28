@@ -36,16 +36,22 @@ class Monster():
         self.hp = hp
     def run(self):
         print('移动到某个位置')
+    def whoami(self):
+        print('我是怪物父类')
+        
 
 #animals是monster的子类，继承父类的属性和方法
 class Animals(Monster):
     '普通怪物'
     def __init__(self, hp = 10):
-        self.hp = hp
+        super().__init__(hp)
 
 class Boss(Monster):
     'boss类怪物'
-    pass
+    def __init__(self,hp = 100):
+        self.hp = hp
+    def whoami(self):
+        print('我是boss我怕谁')
 
 #存在多个类的时候，通常先用pass。先理清类之间的逻辑关系，再逐个实现
 
@@ -57,6 +63,10 @@ print(a1.run())
 a2 = Animals(1)
 print(a2.hp)
 print(a2.run())
+
+#子类方法会把父类覆盖掉
+a3 = Boss(800)
+a3.whoami()
 
 
 #user11 = Player('tom',100,'war')   #类的实例化

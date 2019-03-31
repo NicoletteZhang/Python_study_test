@@ -17,6 +17,7 @@ url = 'http://www.jdlingyu.mobi/'
 
 root = '/Users/Nicolette/Pictures/绝对领域'
 
+#在分析网页源代码上还不够熟练，不能很快定位类名、关键变量名等
 def get_page(url, page_num):
     pageList = []
     for i in range(1, page_num + 1):

@@ -3,6 +3,7 @@ import os
 import re
 
 #定义headers
+
 headers = {
     "Accept" :"text/html, application/xhtml+xml, application/xml;q=0.9,image/webq, */*;q=0.8",
     "Accept-Language": "zh-CN,zh; q=0.8",

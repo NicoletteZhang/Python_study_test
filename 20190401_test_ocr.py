@@ -11,6 +11,7 @@ import os
 import json
 
 #好像有些库没有成功导入，待解决
+
 """
 This class does some initial training of a neural network for predicting drawn
 digits based on a data set in data_matrix and data_labels. It can then be used to

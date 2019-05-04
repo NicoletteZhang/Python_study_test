@@ -12,6 +12,7 @@ import struct
 import portalocker
 
 
+
 class Storage(object):
     SUPERBLOCK_SIZE = 4096
     INTEGER_FORMAT = "!Q"

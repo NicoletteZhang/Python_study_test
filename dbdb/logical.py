@@ -1,3 +1,4 @@
+
 class ValueRef(object):
     def prepare_to_store(self, storage):
         pass

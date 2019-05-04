@@ -1,6 +1,5 @@
 import pickle
 
-
 from dbdb.logical import LogicalBase, ValueRef
 
 

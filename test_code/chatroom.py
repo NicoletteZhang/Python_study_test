@@ -104,3 +104,59 @@ class MyTcpHandler(socketserver.StreamRequestHandler):
                 self.name.strip('\n'), self.sendtime, self.tomsg)
             userg[self.keyname].send(self.sendmsg.encode(encoding="utf-8"))
 
+    def handle(self):
+        self.usernames = ""
+        self.cur_thread = threading.current_thread()
+        #        print "%s Staring..." % self.cur_thread.name
+        #        print threading.active_count()
+        print('-' * 10, 'Get new connection', '-' * 10)
+        #        print self.request
+        self.sendmsg = """
+                ======================================
+                |        Welcome to My Server        |
+                |       Please Enter You Name:       |
+                |                                    |
+                ======================================\n"""
+        self.wfile.write(self.sendmsg.encode(encoding="utf-8"))
+        self.name = self.rfile.readline().decode()
+        while not self.name.strip('\n').strip():
+            self.wfile.write('Please Enter You Name\n')
+            self.name = self.rfile.readline().decode()
+        while True:
+            if self.name not in userg:
+                userg[self.name] = self.request
+                self.sendmsg = "Hello %s" % self.name
+                self.wfile.write(self.sendmsg.encode(encoding="utf-8"))
+                self.newuserlogin(self.name)
+                self.whoonline(self.name)
+                break
+            else:
+                self.wfile.write('Please Enter A New Name:\n')
+                self.name = self.rfile.readline().decode()
+        while True:
+            self.resvmsg = self.rfile.readline().decode()
+            #            print "*" * 30
+            #            print self.resvmsg
+            if self.resvmsg.strip(
+                    '\n') is None or self.resvmsg.strip('\n') == "":
+                continue
+            elif self.resvmsg.strip('\n') == "quit":
+                del (userg[self.name])
+                self.userlogout(self.name)
+                break
+            elif reg.search(self.resvmsg):
+                self.sendmsgtoone(self.resvmsg, self.name)
+            elif self.resvmsg.strip('\n') == "w" or self.resvmsg.strip('\n') == "W":
+                self.whoonline(self.name)
+            else:
+                self.sendmsgs(self.resvmsg, self.name)
+
+    def finish(self):
+        if not self.wfile.closed:
+            self.wfile.flush()
+        self.wfile.close()
+        self.rfile.close()
+
+
+server = MyThreadingTCPServer(srvip, MyTcpHandler)
+server.serve_forever()

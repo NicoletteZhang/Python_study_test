@@ -299,3 +299,41 @@ def classify(inputTree, featLabels, testVec):
 				classLabel = classify(secondDict[key], featLabels, testVec)
 			else: classLabel = secondDict[key]
 	return classLabel
+
+# """
+# 函数说明:存储决策树
+# Parameters:
+# 	inputTree - 已经生成的决策树
+# 	filename - 决策树的存储文件名
+# Returns:
+# 	无
+# """
+
+def storeTree(inputTree, filename):
+	with open(filename, 'wb') as fw:
+		pickle.dump(inputTree, fw)
+
+# """
+# 函数说明:读取决策树
+# Parameters:
+# 	filename - 决策树的存储文件名
+# Returns:
+# 	pickle.load(fr) - 决策树字典
+# """
+
+def grabTree(filename):
+	fr = open(filename, 'rb')
+	return pickle.load(fr)
+
+
+if __name__ == '__main__':
+	dataSet, labels = createDataSet()
+	featLabels = []
+	myTree = createTree(dataSet, labels, featLabels)
+	createPlot(myTree)
+	testVec = [0,1]										#测试数据
+	result = classify(myTree, featLabels, testVec)
+	if result == 'yes':
+		print('放贷')
+	if result == 'no':
+		print('不放贷')

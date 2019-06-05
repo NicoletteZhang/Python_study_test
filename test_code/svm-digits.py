@@ -118,3 +118,126 @@ def selectJ(i, oS, Ei):
 		j = selectJrand(i, oS.m)							#随机选择alpha_j的索引值
 		Ej = calcEk(oS, j)									#计算Ej
 	return j, Ej 											#j,Ej
+
+def updateEk(oS, k):
+	"""
+	计算Ek,并更新误差缓存
+	Parameters：
+		oS - 数据结构
+		k - 标号为k的数据的索引值
+	Returns:
+		无
+	"""
+	Ek = calcEk(oS, k)										#计算Ek
+	oS.eCache[k] = [1,Ek]									#更新误差缓存
+
+
+def clipAlpha(aj,H,L):
+	"""
+	修剪alpha_j
+	Parameters:
+	    aj - alpha_j的值
+	    H - alpha上限
+	    L - alpha下限
+	Returns:
+	    aj - 修剪后的alpah_j的值
+	"""
+	if aj > H:
+		aj = H
+	if L > aj:
+		aj = L
+	return aj
+
+def innerL(i, oS):
+	"""
+	优化的SMO算法
+	Parameters：
+		i - 标号为i的数据的索引值
+		oS - 数据结构
+	Returns:
+		1 - 有任意一对alpha值发生变化
+		0 - 没有任意一对alpha值发生变化或变化太小
+	"""
+	#步骤1：计算误差Ei
+	Ei = calcEk(oS, i)
+	#优化alpha,设定一定的容错率。
+	if ((oS.labelMat[i] * Ei < -oS.tol) and (oS.alphas[i] < oS.C)) or ((oS.labelMat[i] * Ei > oS.tol) and (oS.alphas[i] > 0)):
+		#使用内循环启发方式2选择alpha_j,并计算Ej
+		j,Ej = selectJ(i, oS, Ei)
+		#保存更新前的aplpha值，使用深拷贝
+		alphaIold = oS.alphas[i].copy(); alphaJold = oS.alphas[j].copy();
+		#步骤2：计算上下界L和H
+		if (oS.labelMat[i] != oS.labelMat[j]):
+			L = max(0, oS.alphas[j] - oS.alphas[i])
+			H = min(oS.C, oS.C + oS.alphas[j] - oS.alphas[i])
+		else:
+			L = max(0, oS.alphas[j] + oS.alphas[i] - oS.C)
+			H = min(oS.C, oS.alphas[j] + oS.alphas[i])
+		if L == H:
+			print("L==H")
+			return 0
+		#步骤3：计算eta
+		eta = 2.0 * oS.K[i,j] - oS.K[i,i] - oS.K[j,j]
+		if eta >= 0:
+			print("eta>=0")
+			return 0
+		#步骤4：更新alpha_j
+		oS.alphas[j] -= oS.labelMat[j] * (Ei - Ej)/eta
+		#步骤5：修剪alpha_j
+		oS.alphas[j] = clipAlpha(oS.alphas[j],H,L)
+		#更新Ej至误差缓存
+		updateEk(oS, j)
+		if (abs(oS.alphas[j] - alphaJold) < 0.00001):
+			print("alpha_j变化太小")
+			return 0
+		#步骤6：更新alpha_i
+		oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])
+		#更新Ei至误差缓存
+		updateEk(oS, i)
+		#步骤7：更新b_1和b_2
+		b1 = oS.b - Ei- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,i] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[i,j]
+		b2 = oS.b - Ej- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,j]- oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[j,j]
+		#步骤8：根据b_1和b_2更新b
+		if (0 < oS.alphas[i]) and (oS.C > oS.alphas[i]): oS.b = b1
+		elif (0 < oS.alphas[j]) and (oS.C > oS.alphas[j]): oS.b = b2
+		else: oS.b = (b1 + b2)/2.0
+		return 1
+	else:
+		return 0
+
+def smoP(dataMatIn, classLabels, C, toler, maxIter, kTup = ('lin',0)):
+	"""
+	完整的线性SMO算法
+	Parameters：
+		dataMatIn - 数据矩阵
+		classLabels - 数据标签
+		C - 松弛变量
+		toler - 容错率
+		maxIter - 最大迭代次数
+		kTup - 包含核函数信息的元组
+	Returns:
+		oS.b - SMO算法计算的b
+		oS.alphas - SMO算法计算的alphas
+	"""
+	oS = optStruct(np.mat(dataMatIn), np.mat(classLabels).transpose(), C, toler, kTup)				#初始化数据结构
+	iter = 0 																						#初始化当前迭代次数
+	entireSet = True; alphaPairsChanged = 0
+	while (iter < maxIter) and ((alphaPairsChanged > 0) or (entireSet)):							#遍历整个数据集都alpha也没有更新或者超过最大迭代次数,则退出循环
+		alphaPairsChanged = 0
+		if entireSet:																				#遍历整个数据集
+			for i in range(oS.m):
+				alphaPairsChanged += innerL(i,oS)													#使用优化的SMO算法
+				print("全样本遍历:第%d次迭代 样本:%d, alpha优化次数:%d" % (iter,i,alphaPairsChanged))
+			iter += 1
+		else: 																						#遍历非边界值
+			nonBoundIs = np.nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]						#遍历不在边界0和C的alpha
+			for i in nonBoundIs:
+				alphaPairsChanged += innerL(i,oS)
+				print("非边界遍历:第%d次迭代 样本:%d, alpha优化次数:%d" % (iter,i,alphaPairsChanged))
+			iter += 1
+		if entireSet:																				#遍历一次后改为非边界遍历
+			entireSet = False
+		elif (alphaPairsChanged == 0):																#如果alpha没有更新,计算全样本遍历
+			entireSet = True
+		print("迭代次数: %d" % iter)
+	return oS.b,oS.alphas 																			#返回SMO算法计算的b和alphas

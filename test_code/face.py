@@ -7,12 +7,16 @@ import numpy as np
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QIcon, QTextCursor
 from PyQt5.QtWidgets import QApplication, QWidget, QMessageBox, QTableWidgetItem, QAbstractItemView
+from PyQt5.uic import loadUi
 
 import logging
 import logging.config
 import os
 import shutil
-
+import sqlite3
+import sys
+import threading
+import multiprocessing
 
 from datetime import datetime
 
@@ -199,3 +203,121 @@ class DataManageUI(QWidget):
             return None, None
         (x, y, w, h) = faces[0]
         return gray[y:y + w, x:x + h], faces[0]
+
+    # 准备图片数据
+    def prepareTrainingData(self, data_folder_path):
+        dirs = os.listdir(data_folder_path)
+        faces = []
+        labels = []
+
+        face_id = 1
+        conn = sqlite3.connect(self.database)
+        cursor = conn.cursor()
+
+        # 遍历人脸库
+        for dir_name in dirs:
+            if not dir_name.startswith('stu_'):
+                continue
+            stu_id = dir_name.replace('stu_', '')
+            try:
+                cursor.execute('SELECT * FROM users WHERE stu_id=?', (stu_id,))
+                ret = cursor.fetchall()
+                if not ret:
+                    raise RecordNotFound
+                cursor.execute('UPDATE users SET face_id=? WHERE stu_id=?', (face_id, stu_id,))
+            except RecordNotFound:
+                logging.warning('数据库中找不到学号为{}的用户记录'.format(stu_id))
+                self.logQueue.put('发现学号为{}的人脸数据，但数据库中找不到相应记录，已忽略'.format(stu_id))
+                continue
+            subject_dir_path = data_folder_path + '/' + dir_name
+            subject_images_names = os.listdir(subject_dir_path)
+            for image_name in subject_images_names:
+                if image_name.startswith('.'):
+                    continue
+                image_path = subject_dir_path + '/' + image_name
+                image = cv2.imread(image_path)
+                face, rect = self.detectFace(image)
+                if face is not None:
+                    faces.append(face)
+                    labels.append(face_id)
+            face_id = face_id + 1
+
+        cursor.close()
+        conn.commit()
+        conn.close()
+
+        return faces, labels
+
+    # 训练人脸数据
+    def train(self):
+        try:
+            if not os.path.isdir(self.datasets):
+                raise FileNotFoundError
+
+            text = '系统将开始训练人脸数据，界面会暂停响应一段时间，完成后会弹出提示。'
+            informativeText = '<b>训练过程请勿进行其它操作，是否继续？</b>'
+            ret = DataManageUI.callDialog(QMessageBox.Question, text, informativeText,
+                                          QMessageBox.Yes | QMessageBox.No,
+                                          QMessageBox.No)
+            if ret == QMessageBox.Yes:
+                face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+                if not os.path.exists('./recognizer'):
+                    os.makedirs('./recognizer')
+            faces, labels = self.prepareTrainingData(self.datasets)
+            face_recognizer.train(faces, np.array(labels))
+            face_recognizer.save('./recognizer/trainingData.yml')
+        except FileNotFoundError:
+            logging.error('系统找不到人脸数据目录{}'.format(self.datasets))
+            self.trainButton.setIcon(QIcon('./icons/error.png'))
+            self.logQueue.put('未发现人脸数据目录{}，你可能未进行人脸采集'.format(self.datasets))
+        except Exception as e:
+            logging.error('遍历人脸库出现异常，训练人脸数据失败')
+            self.trainButton.setIcon(QIcon('./icons/error.png'))
+            self.logQueue.put('Error：遍历人脸库出现异常，训练失败')
+        else:
+            text = '<font color=green><b>Success!</b></font> 系统已生成./recognizer/trainingData.yml'
+            informativeText = '<b>人脸数据训练完成！</b>'
+            DataManageUI.callDialog(QMessageBox.Information, text, informativeText, QMessageBox.Ok)
+            self.trainButton.setIcon(QIcon('./icons/success.png'))
+            self.logQueue.put('Success：人脸数据训练完成')
+            self.initDb()
+
+    # 系统日志服务常驻，接收并处理系统日志
+    def receiveLog(self):
+        while True:
+            data = self.logQueue.get()
+            if data:
+                self.receiveLogSignal.emit(data)
+            else:
+                continue
+
+    # LOG输出
+    def logOutput(self, log):
+        time = datetime.now().strftime('[%Y/%m/%d %H:%M:%S]')
+        log = time + ' ' + log + '\n'
+
+        self.logTextEdit.moveCursor(QTextCursor.End)
+        self.logTextEdit.insertPlainText(log)
+        self.logTextEdit.ensureCursorVisible()  # 自动滚屏
+
+    # 系统对话框
+    @staticmethod
+    def callDialog(icon, text, informativeText, standardButtons, defaultButton=None):
+        msg = QMessageBox()
+        msg.setWindowIcon(QIcon('./icons/icon.png'))
+        msg.setWindowTitle('OpenCV Face Recognition System - DataManage')
+        msg.setIcon(icon)
+        msg.setText(text)
+        msg.setInformativeText(informativeText)
+        msg.setStandardButtons(standardButtons)
+        if defaultButton:
+            msg.setDefaultButton(defaultButton)
+        return msg.exec()
+
+
+if __name__ == '__main__':
+    logging.config.fileConfig('./config/logging.cfg')
+    app = QApplication(sys.argv)
+    window = DataManageUI()
+    window.show()
+    sys.exit(app.exec())

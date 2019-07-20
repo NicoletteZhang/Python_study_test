@@ -172,3 +172,82 @@ class SHA1:
             if from_appid != appid:
                 return ierror.WXBizMsgCrypt_ValidateAppid_Error, None
             return 0, xml_content.decode()
+
+ def get_random_str(self):
+        """ 随机生成16位字符串
+        @return: 16位字符串
+        """
+        rule = string.ascii_letters + string.digits
+        str = random.sample(rule, 16)
+        return "".join(str).encode()
+
+
+class WXBizMsgCrypt(object):
+    # 构造函数
+    # @param sToken: 公众平台上，开发者设置的Token
+    # @param sEncodingAESKey: 公众平台上，开发者设置的EncodingAESKey
+    # @param sAppId: 企业号的AppId
+    def __init__(self, sToken, sEncodingAESKey, sAppId):
+        try:
+            self.key = base64.b64decode(sEncodingAESKey + "=")
+            assert len(self.key) == 32
+        except Exception:
+            throw_exception("[error]: EncodingAESKey unvalid !", FormatException)
+            # return ierror.WXBizMsgCrypt_IllegalAesKey)
+        self.token = sToken.encode()
+        self.appid = sAppId.encode()
+
+    def EncryptMsg(self, sReplyMsg, sNonce, timestamp=None):
+        # 将公众号回复用户的消息加密打包
+        # @param sReplyMsg: 企业号待回复用户的消息，xml格式的字符串
+        # @param sTimeStamp: 时间戳，可以自己生成，也可以用URL参数的timestamp,如为None则自动用当前时间
+        # @param sNonce: 随机串，可以自己生成，也可以用URL参数的nonce
+        # sEncryptMsg: 加密后的可以直接回复用户的密文，包括msg_signature, timestamp, nonce, encrypt的xml格式的字符串,
+        # return：成功0，sEncryptMsg,失败返回对应的错误码None
+        pc = Prpcrypt(self.key)
+        ret, encrypt = pc.encrypt(sReplyMsg, self.appid)
+        if ret != 0:
+            return ret, None
+        if timestamp is None:
+            timestamp = str(int(time.time()))
+        # 生成安全签名
+        sha1 = SHA1()
+        ret, signature = sha1.getSHA1(self.token, timestamp, sNonce, encrypt)
+
+        if ret != 0:
+            return ret, None
+        xmlParse = XMLParse()
+        return ret, xmlParse.generate(encrypt, signature, timestamp, sNonce)
+    def VerifyURL(self, sMsgSignature, sTimeStamp, sNonce, sEchoStr):
+        sha1 = SHA1()
+        ret,signature = sha1.getSHA1(self.token, sTimeStamp, sNonce, sEchoStr)
+        if ret  != 0:
+            return ret, None
+        if not signature == sMsgSignature:
+            return ierror.WXBizMsgCrypt_ValidateSignature_Error, None
+        pc = Prpcrypt(self.key)
+        ret,sReplyEchoStr = pc.decrypt(sEchoStr,self.appid)
+        return ret,sReplyEchoStr
+
+    def DecryptMsg(self, sPostData, sMsgSignature, sTimeStamp, sNonce):
+        # 检验消息的真实性，并且获取解密后的明文
+        # @param sMsgSignature: 签名串，对应URL参数的msg_signature
+        # @param sTimeStamp: 时间戳，对应URL参数的timestamp
+        # @param sNonce: 随机串，对应URL参数的nonce
+        # @param sPostData: 密文，对应POST请求的数据
+        #  xml_content: 解密后的原文，当return返回0时有效
+        # @return: 成功0，失败返回对应的错误码
+        # 验证安全签名
+        xmlParse = XMLParse()
+        ret, encrypt, touser_name = xmlParse.extract(sPostData)
+        if ret != 0:
+            return ret, None
+        sha1 = SHA1()
+        ret, signature = sha1.getSHA1(self.token, sTimeStamp, sNonce, encrypt)
+        if ret != 0:
+            return ret, None
+        if not signature == sMsgSignature:
+            return ierror.WXBizMsgCrypt_ValidateSignature_Error, None
+        pc = Prpcrypt(self.key)
+        ret, xml_content = pc.decrypt(encrypt, self.appid)
+        return ret, xml_content
